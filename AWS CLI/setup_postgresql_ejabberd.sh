@@ -9,8 +9,8 @@ set -e  # Detener la ejecución en caso de error
 # Variables de configuración
 PG_VERSION="14"
 DB_NAME="ejabberd_db"
-DB_USER="ejabberd"
-DB_PASS="EjabberdSecurePass123"
+DB_USER="ejabberd_jesus"
+DB_PASS="010499Enero"
 
 echo "🚀 Iniciando instalación de PostgreSQL..."
 

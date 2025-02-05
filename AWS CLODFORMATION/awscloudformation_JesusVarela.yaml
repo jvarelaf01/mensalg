@@ -1,0 +1,409 @@
+#04/02/2025
+#Jesus Alfonso Varela Fernandez
+#Version 2.0
+
+Resources:
+
+  # =====================
+  # Creación de Claves Asimetricas
+  # =====================
+
+  KeyPair:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: ssh-mensagl-2025-jesusvf
+
+  # =======================
+  # Creación de VPC y Subredes en 2 AZs
+  # =======================
+
+  MyVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.229.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: VPC-Mensagl-2025-jesusvf
+
+  SubnetPublic1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.229.1.0/24
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ''
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Subnet-Publica-1
+
+  SubnetPublic2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.229.2.0/24
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs ''
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Subnet-Publica-2
+
+  SubnetPrivate1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.229.3.0/24
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ''
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: Subnet-Privada-1
+
+  SubnetPrivate2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.229.4.0/24
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs ''
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: Subnet-Privada-2
+
+  # ======================
+  # Crear Gateway de Internet y NAT
+  # ======================
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Internet-Gateway-Mensagl-2025
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref MyVPC
+      InternetGatewayId: !Ref InternetGateway
+
+  ElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: Elastic-IP-NAT
+
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIP.AllocationId
+      SubnetId: !Ref SubnetPublic1
+      Tags:
+        - Key: Name
+          Value: NAT-Gateway
+
+  # ==================
+  # Crear Grupos de Seguridad
+  # ==================
+
+  SecurityGroupProxy:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Proxy Nginx
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: SG-Proxy
+
+  SecurityGroupXMPP:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "XMPP ejabberd"
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5222
+          ToPort: 5222
+          CidrIp: 10.229.0.0/16  # Permitir tráfico interno dentro de la VPC
+        - IpProtocol: tcp
+          FromPort: 5269
+          ToPort: 5269
+          CidrIp: 10.229.0.0/16  # Permitir tráfico interno dentro de la VPC
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          SourceSecurityGroupId: !Ref SecurityGroupProxy
+      Tags:
+        - Key: Name
+          Value: SG-XMPP
+
+  SecurityGroupPostgreSQL:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "PostgreSQL en EC2"
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref SecurityGroupXMPP
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref SecurityGroupProxy
+      Tags:
+        - Key: Name
+          Value: SG-PostgreSQL
+
+  SecurityGroupRDS:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDS MySQL
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref SecurityGroupProxy
+      Tags:
+        - Key: Name
+          Value: SG-RDS
+
+  # =============
+  # Crear Instancias EC2
+  # =============
+
+  ProxyInstance1:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      KeyName: !Ref KeyPair
+      ImageId: ami-04b4f1a9cf54c11d0
+      Tags:
+        - Key: Name
+          Value: "Proxyinverso1"
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          SubnetId: !Ref SubnetPublic1
+          GroupSet:
+            - !Ref SecurityGroupProxy
+
+  ProxyInstance2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      KeyName: !Ref KeyPair
+      ImageId: ami-04b4f1a9cf54c11d0
+      Tags:
+        - Key: Name
+          Value: "Proxyinverso2"
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          SubnetId: !Ref SubnetPublic2
+          GroupSet:
+            - !Ref SecurityGroupProxy
+
+  XmppInstance1:
+    Type: AWS::EC2::Instance
+    DependsOn: SecurityGroupXMPP
+    Properties:
+      InstanceType: t2.micro
+      KeyName: !Ref KeyPair
+      SubnetId: !Ref SubnetPrivate1
+      PrivateIpAddress: 10.229.3.10
+      SecurityGroupIds:
+        - !Ref SecurityGroupXMPP
+      ImageId: ami-04b4f1a9cf54c11d0
+      Tags:
+        - Key: Name
+          Value: Mensajeria1
+
+  XmppInstance2:
+    Type: AWS::EC2::Instance
+    DependsOn: SecurityGroupXMPP
+    Properties:
+      InstanceType: t2.micro
+      KeyName: !Ref KeyPair
+      SubnetId: !Ref SubnetPrivate1
+      PrivateIpAddress: 10.229.3.20
+      SecurityGroupIds:
+        - !Ref SecurityGroupXMPP
+      ImageId: ami-04b4f1a9cf54c11d0
+      Tags:
+        - Key: Name
+          Value: Mensajeria2
+
+  PostgreSQLInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      KeyName: !Ref KeyPair
+      ImageId: ami-04b4f1a9cf54c11d0
+      Tags:
+        - Key: Name
+          Value: "Postgresql"
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: !Ref SubnetPrivate1
+          GroupSet:
+            - !Ref SecurityGroupPostgreSQL
+
+  SoporteInstance1:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      KeyName: !Ref KeyPair
+      SubnetId: !Ref SubnetPrivate2
+      PrivateIpAddress: 10.229.4.10
+      SecurityGroupIds:
+        - !Ref SecurityGroupRDS
+      ImageId: ami-04b4f1a9cf54c11d0
+      Tags:
+        - Key: Name
+          Value: Soporte1
+
+  SoporteInstance2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      KeyName: !Ref KeyPair
+      SubnetId: !Ref SubnetPrivate2
+      PrivateIpAddress: 10.229.4.20
+      SecurityGroupIds:
+        - !Ref SecurityGroupRDS
+      ImageId: ami-04b4f1a9cf54c11d0
+      Tags:
+        - Key: Name
+          Value: Soporte2
+
+  # =============
+  # Base de Datos RDS
+  # =============
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Grupo de subredes para RDS MySQL CMS
+      SubnetIds:
+        - !Ref SubnetPrivate1
+        - !Ref SubnetPrivate2
+      Tags:
+        - Key: Name
+          Value: cms-db-subnet-group
+
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: cms-database
+      AllocatedStorage: '20'
+      StorageType: gp2
+      DBInstanceClass: db.t3.micro
+      Engine: mysql
+      EngineVersion: '8.0'
+      MasterUsername: admin
+      MasterUserPassword: Admin123
+      DBName: wordpress_db
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref SecurityGroupRDS
+      PubliclyAccessible: true
+      Tags:
+        - Key: Name
+          Value: wordpress_db
+
+Outputs:
+ 
+  # Información de la clave SSH
+  # -------------------------------
+
+  KeyPairName:
+    Description: Nombre del Par de Claves creado
+    Value: !Ref KeyPair
+
+  # Información de la VPC y Subredes
+  # -------------------------------------
+
+  VPCId:
+    Description: ID de la VPC
+    Value: !Ref MyVPC
+
+  SubnetPublic1Id:
+    Description: ID de la Subnet Pública 1
+    Value: !Ref SubnetPublic1
+
+  SubnetPublic2Id:
+    Description: ID de la Subnet Pública 2
+    Value: !Ref SubnetPublic2
+
+  SubnetPrivate1Id:
+    Description: ID de la Subnet Privada 1
+    Value: !Ref SubnetPrivate1
+
+  SubnetPrivate2Id:
+    Description: ID de la Subnet Privada 2
+    Value: !Ref SubnetPrivate2
+
+  #  Información de las Instancias EC2
+  # --------------------------------------
+
+  ProxyInstance1Id:
+    Description: ID de la instancia Proxy Nginx 1
+    Value: !Ref ProxyInstance1
+
+  ProxyInstance2Id:
+    Description: ID de la instancia Proxy Nginx 2
+    Value: !Ref ProxyInstance2
+
+  XmppInstance1Id:
+    Description: ID de la instancia XMPP Mensajería 1
+    Value: !Ref XmppInstance1
+
+  XmppInstance2Id:
+    Description: ID de la instancia XMPP Mensajería 2
+    Value: !Ref XmppInstance2
+
+  PostgreSQLInstanceId:
+    Description: ID de la instancia PostgreSQL
+    Value: !Ref PostgreSQLInstance
+
+  SoporteInstance1Id:
+    Description: ID de la instancia de Soporte 1
+    Value: !Ref SoporteInstance1
+
+  SoporteInstance2Id:
+    Description: ID de la instancia de Soporte 2
+    Value: !Ref SoporteInstance2
+
+
+  #  Información de la Base de Datos RDS
+  # --------------------------------------------
+
+  RDSInstanceId:
+    Description: ID de la instancia RDS MySQL
+    Value: !Ref RDSInstance

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #Jesus Alfonso Varela Fernandez
-#Version 3.0
+#Version 4.0
 #04/02/2025
 
 #Usando USER DATA para instalar postgresql
