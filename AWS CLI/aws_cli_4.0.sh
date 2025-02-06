@@ -134,7 +134,10 @@ SG_DB_CMS_ID=$(aws ec2 create-security-group --group-name SG-DB-CMS --descriptio
 
 # Reglas para SG-Proxy (Acceso público HTTP, HTTPS, SSH)
 # =======================
-
+aws ec2 authorize-security-group-ingress --group-id $SG_PROXY_ID --protocol tcp --port 5222 --cidr 0.0.0.0/0
+aws ec2 authorize-security-group-ingress --group-id $SG_PROXY_ID --protocol tcp --port 5269 --cidr 0.0.0.0/0
+aws ec2 authorize-security-group-ingress --group-id $SG_PROXY_ID --protocol tcp --port 5280 --cidr 0.0.0.0/0
+aws ec2 authorize-security-group-ingress --group-id $SG_PROXY_ID --protocol tcp --port 5270 --cidr 0.0.0.0/0
 aws ec2 authorize-security-group-ingress --group-id $SG_PROXY_ID --protocol tcp --port 80 --cidr 0.0.0.0/0
 aws ec2 authorize-security-group-ingress --group-id $SG_PROXY_ID --protocol tcp --port 443 --cidr 0.0.0.0/0
 aws ec2 authorize-security-group-ingress --group-id $SG_PROXY_ID --protocol tcp --port 22 --cidr 0.0.0.0/0
@@ -144,6 +147,7 @@ aws ec2 authorize-security-group-ingress --group-id $SG_PROXY_ID --protocol tcp 
 
 aws ec2 authorize-security-group-ingress --group-id $SG_XMPP_ID --protocol tcp --port 5222 --source-group $SG_PROXY_ID
 aws ec2 authorize-security-group-ingress --group-id $SG_XMPP_ID --protocol tcp --port 5269 --source-group $SG_PROXY_ID
+aws ec2 authorize-security-group-ingress --group-id $SG_XMPP_ID --protocol tcp --port 5270 --source-group $SG_PROXY_ID
 aws ec2 authorize-security-group-ingress --group-id $SG_XMPP_ID --protocol tcp --port 5280 --source-group $SG_PROXY_ID
 aws ec2 authorize-security-group-ingress --group-id $SG_XMPP_ID --protocol tcp --port 22 --source-group $SG_PROXY_ID
 
